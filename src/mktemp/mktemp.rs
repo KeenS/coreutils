@@ -30,7 +30,15 @@ static NAME: &'static str = "mktemp";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static DEFAULT_TEMPLATE: &'static str = "tmp.XXXXXXXXXX";
 
-
+macro_rules! qcrash {
+    ($quiet: ident, $exitcode: expr, $($args:tt)+) => {
+        if $quiet {
+            return $exitcode;
+        } else {
+            crash!($exitcode, $($args)+);
+        }
+    }
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -51,10 +59,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
-    if matches.opt_present("quiet") {
-        // TODO: close stderror. `crash!` macro always write output to stderror
-        crash!(1, "quiet option is not supported yet.");
-    };
+    let quiet =  matches.opt_present("quiet");
 
     if  matches.opt_present("help") {
         print_help(&opts);
@@ -66,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if 1 < matches.free.len() {
-        crash!(1, "Too many templates");
+        qcrash!(quiet, 1, "Too many templates");
     }
     // <<
 
@@ -86,7 +91,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Some(suf) => if s == "" {
                 (p, r, suf)
             } else {
-                crash!(1, "Template should end with 'X' when you specify suffix option.")
+                qcrash!(quiet, 1, "Template should end with 'X' when you specify suffix option.")
             },
             None => (p, r, s.to_owned())
         },
@@ -94,18 +99,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if rand < 3 {
-        crash!(1, "Too few 'X's in template")
+        qcrash!(quiet, 1, "Too few 'X's in template")
     }
 
     if suffix.chars().any(is_separator) {
-        crash!(1, "suffix cannot contain any path separators");
+        qcrash!(quiet, 1, "suffix cannot contain any path separators");
     }
 
 
     let tmpdir = match matches.opt_str("tmpdir") {
         Some(s) => {
             if PathBuf::from(prefix).is_absolute() {
-                crash!(1, "template must not be an absolute path when tempdir is specified.");
+                qcrash!(quiet, 1, "template must not be an absolute path when tempdir is specified.");
             }
             PathBuf::from(s)
                 
@@ -116,7 +121,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if dry_run {
         dry_exec(tmpdir, prefix, rand, &suffix)
     } else {
-        exec(tmpdir, prefix, rand , &suffix, make_dir)
+        exec(tmpdir, prefix, rand , &suffix, make_dir, quiet)
     }
 
 }
@@ -174,10 +179,10 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
 
 
 
-fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> i32 {
+fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool, quiet: bool) -> i32 {
     // TODO: respect make_dir option
     if make_dir {
-        crash!(1, "Directory option is not supported yet. Sorry.");
+        qcrash!(quiet, 1, "Directory option is not supported yet. Sorry.");
     }
 
 
@@ -189,7 +194,7 @@ fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool
 
     let tmpfile = match tmpfile {
         Ok(f) => f,
-        Err(_) => crash!(1, "failed to create tempfile")
+        Err(_) => qcrash!(quiet, 1, "failed to create tempfile")
     };
     
     let tmpname = tmpfile
